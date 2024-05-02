@@ -1,0 +1,18 @@
+[package]
+name = "ratatui-counter-app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+color-eyre = "0.6.3"
+crossterm = { version = "0.27.0", features = ["event-stream"] }
+ratatui = "0.26.2"
+tokio = { version = "1.37.0", features = ["full"] }
+tokio-util = "0.7.10"
+futures = "0.3.30"
+serde = "1.0.200"
+serde_derive = "1.0.200"
+tui-input = "0.8.0"
+anyhow = "1.0.82"
