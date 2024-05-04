@@ -1,18 +1,22 @@
+mod list;
 mod tui;
 
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use crossterm::event::KeyCode::Char;
+use crossterm::event::KeyCode::{self, Char};
+use list::TaskList;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tui::Event;
 
 // App state
-struct App {
+struct App<'a> {
     counter: i64,
     should_quit: bool,
     action_tx: UnboundedSender<Action>,
+
+    tasks: TaskList<'a>,
 }
 
 // App actions
@@ -26,27 +30,39 @@ pub enum Action {
     Quit,
     Render,
     None,
+    NextItem,
+    PreviousItem,
+    AddItem,
 }
 
-// App ui render function
 fn ui(f: &mut Frame, app: &mut App) {
-    let area = f.size();
-    f.render_widget(
-        Paragraph::new(format!(
-            "Press j or k to increment or decrement.\n\nCounter: {}",
-            app.counter,
-        ))
-        .block(
-            Block::default()
-                .title("ratatui async counter app")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        )
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center),
-        area,
-    );
+    // let layout = Layout::default()
+    //     .direction(Direction::Vertical)
+    //     .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+    //     .split(f.size());
+
+    let center = centered_rect(f.size(), 30, 30);
+    list::ui(f, center, &mut app.tasks);
+}
+
+fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
 
 fn get_action(_app: &App, event: Event) -> Action {
@@ -56,8 +72,9 @@ fn get_action(_app: &App, event: Event) -> Action {
         Event::Render => Action::Render,
         Event::Key(key) => {
             match key.code {
-                Char('j') => Action::Increment,
-                Char('k') => Action::Decrement,
+                Char('j') => Action::NextItem,
+                Char('k') => Action::PreviousItem,
+                KeyCode::Enter => Action::AddItem,
                 Char('J') => Action::NetworkRequestAndThenIncrement, // new
                 Char('K') => Action::NetworkRequestAndThenDecrement, // new
                 Char('q') => Action::Quit,
@@ -90,6 +107,18 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
                 tx.send(Action::Decrement).unwrap();
             });
         }
+
+        Action::NextItem => {
+            app.tasks.next();
+        }
+        Action::PreviousItem => {
+            app.tasks.previous();
+        }
+
+        Action::AddItem => {
+            app.tasks.items.push("Ziger");
+        }
+
         Action::Quit => app.should_quit = true,
         _ => {}
     };
@@ -109,6 +138,10 @@ async fn run() -> Result<()> {
         counter: 0,
         should_quit: false,
         action_tx: action_tx.clone(),
+        tasks: TaskList {
+            state: ListState::default(),
+            items: vec![],
+        },
     };
 
     loop {
