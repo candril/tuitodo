@@ -5,12 +5,12 @@ use ratatui::{
     Frame,
 };
 
-pub struct TaskList<'a> {
+pub struct TaskList {
     pub state: ListState,
-    pub items: Vec<&'a str>,
+    pub items: Vec<String>,
 }
 
-impl TaskList<'_> {
+impl TaskList {
     pub fn previous(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
@@ -24,6 +24,7 @@ impl TaskList<'_> {
         };
         self.state.select(Some(i));
     }
+
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
@@ -40,8 +41,12 @@ impl TaskList<'_> {
     }
 }
 
-pub fn ui(f: &mut Frame, area: Rect, tasks: &mut TaskList<'_>) {
-    let items: Vec<ListItem> = tasks.items.iter().map(|i| ListItem::from(*i)).collect();
+pub fn ui(f: &mut Frame, area: Rect, tasks: &mut TaskList) {
+    let items: Vec<ListItem> = tasks
+        .items
+        .iter()
+        .map(|i| ListItem::from(i.clone()))
+        .collect();
 
     let list = List::new(items)
         .style(

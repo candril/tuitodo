@@ -31,7 +31,7 @@ pub enum Event {
     FocusGained,
     FocusLost,
     Paste(String),
-    Key(KeyEvent),
+    Key(KeyEvent, CrosstermEvent),
     Mouse(MouseEvent),
     Resize(u16, u16),
 }
@@ -118,7 +118,7 @@ impl Tui {
                         match evt {
                           CrosstermEvent::Key(key) => {
                             if key.kind == KeyEventKind::Press {
-                              _event_tx.send(Event::Key(key)).unwrap();
+                              _event_tx.send(Event::Key(key, evt)).unwrap();
                             }
                           },
                           CrosstermEvent::Mouse(mouse) => {

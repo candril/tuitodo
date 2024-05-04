@@ -4,19 +4,29 @@ mod tui;
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use crossterm::event::KeyCode::{self, Char};
+use crossterm::event::{
+    self,
+    KeyCode::{self, Char},
+};
 use list::TaskList;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tui::Event;
+use tui_input::{backend::crossterm::EventHandler, Input};
 
 // App state
-struct App<'a> {
+struct App {
     counter: i64,
     should_quit: bool,
     action_tx: UnboundedSender<Action>,
+    mode: Mode,
+    new_task: Input,
+    tasks: TaskList,
+}
 
-    tasks: TaskList<'a>,
+enum Mode {
+    Normal,
+    Input,
 }
 
 // App actions
@@ -30,19 +40,40 @@ pub enum Action {
     Quit,
     Render,
     None,
-    NextItem,
-    PreviousItem,
-    AddItem,
+    NextTask,
+    PreviousTask,
+    EnterInsertMode,
+    HandleInputKey(event::Event),
+    AddTask,
+    ClearNewTask,
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
-    // let layout = Layout::default()
-    //     .direction(Direction::Vertical)
-    //     .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-    //     .split(f.size());
-
     let center = centered_rect(f.size(), 30, 30);
-    list::ui(f, center, &mut app.tasks);
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Min(10), Constraint::Length(1)])
+        .split(center);
+
+    list::ui(f, layout[0], &mut app.tasks);
+    let input = Paragraph::new(app.new_task.value());
+    f.render_widget(input, layout[1]);
+
+    let width = layout[0].width.max(3) - 1;
+    let scroll = app.new_task.visual_scroll(width as usize);
+    match app.mode {
+        Mode::Normal => {}
+        Mode::Input => {
+            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
+            f.set_cursor(
+                // Put cursor past the end of the input text
+                layout[1].x + ((app.new_task.visual_cursor()).max(scroll) - scroll) as u16,
+                // Move one line down, from the border to the input line
+                layout[1].y,
+            )
+        }
+    }
 }
 
 fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
@@ -70,15 +101,24 @@ fn get_action(_app: &App, event: Event) -> Action {
         Event::Error => Action::None,
         Event::Tick => Action::Tick,
         Event::Render => Action::Render,
-        Event::Key(key) => {
-            match key.code {
-                Char('j') => Action::NextItem,
-                Char('k') => Action::PreviousItem,
-                KeyCode::Enter => Action::AddItem,
-                Char('J') => Action::NetworkRequestAndThenIncrement, // new
-                Char('K') => Action::NetworkRequestAndThenDecrement, // new
-                Char('q') => Action::Quit,
-                _ => Action::None,
+        Event::Key(key, event) => {
+            match _app.mode {
+                Mode::Normal => {
+                    match key.code {
+                        Char('j') => Action::NextTask,
+                        Char('k') => Action::PreviousTask,
+                        KeyCode::Enter => Action::EnterInsertMode,
+                        Char('J') => Action::NetworkRequestAndThenIncrement, // new
+                        Char('K') => Action::NetworkRequestAndThenDecrement, // new
+                        Char('q') => Action::Quit,
+                        _ => Action::None,
+                    }
+                }
+                Mode::Input => match key.code {
+                    KeyCode::Esc => Action::ClearNewTask,
+                    KeyCode::Enter => Action::AddTask,
+                    _ => Action::HandleInputKey(event),
+                },
             }
         }
         _ => Action::None,
@@ -108,15 +148,27 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
             });
         }
 
-        Action::NextItem => {
+        Action::NextTask => {
             app.tasks.next();
         }
-        Action::PreviousItem => {
+        Action::PreviousTask => {
             app.tasks.previous();
         }
 
-        Action::AddItem => {
-            app.tasks.items.push("Ziger");
+        Action::EnterInsertMode => app.mode = Mode::Input,
+
+        Action::ClearNewTask => {
+            app.new_task.reset();
+            app.mode = Mode::Normal
+        }
+
+        Action::AddTask => {
+            app.tasks.items.push(app.new_task.value().into());
+            app.new_task.reset();
+        }
+
+        Action::HandleInputKey(event) => {
+            app.new_task.handle_event(&event);
         }
 
         Action::Quit => app.should_quit = true,
@@ -138,6 +190,8 @@ async fn run() -> Result<()> {
         counter: 0,
         should_quit: false,
         action_tx: action_tx.clone(),
+        new_task: Input::default(),
+        mode: Mode::Normal,
         tasks: TaskList {
             state: ListState::default(),
             items: vec![],
@@ -150,7 +204,7 @@ async fn run() -> Result<()> {
             tui::Event::Quit => action_tx.send(Action::Quit)?,
             tui::Event::Tick => action_tx.send(Action::Tick)?,
             tui::Event::Render => action_tx.send(Action::Render)?,
-            tui::Event::Key(_) => {
+            tui::Event::Key(..) => {
                 let action = get_action(&app, e);
                 action_tx.send(action.clone())?;
             }
