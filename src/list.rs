@@ -7,7 +7,33 @@ use ratatui::{
 
 pub struct TaskList {
     pub state: ListState,
-    pub items: Vec<String>,
+    pub items: Vec<TaskItem>,
+}
+
+pub enum TaskState {
+    Done,
+    Open,
+}
+
+pub struct TaskItem {
+    pub task_state: TaskState,
+    pub text: String,
+}
+
+impl TaskItem {
+    pub fn new(text: String) -> Self {
+        Self {
+            text,
+            task_state: TaskState::Open,
+        }
+    }
+
+    pub fn toggle_state(&mut self) {
+        self.task_state = match self.task_state {
+            TaskState::Open => TaskState::Done,
+            TaskState::Done => TaskState::Open,
+        }
+    }
 }
 
 impl TaskList {
@@ -41,12 +67,17 @@ impl TaskList {
     }
 }
 
+fn item_ui(item: &TaskItem) -> ListItem {
+    let state_char = match item.task_state {
+        TaskState::Done => "x",
+        TaskState::Open => " ",
+    };
+
+    ListItem::from(format!("- [{}] {}", state_char, item.text.clone()))
+}
+
 pub fn ui(f: &mut Frame, area: Rect, tasks: &mut TaskList) {
-    let items: Vec<ListItem> = tasks
-        .items
-        .iter()
-        .map(|i| ListItem::from(i.clone()))
-        .collect();
+    let items: Vec<ListItem> = tasks.items.iter().map(|i| item_ui(i)).collect();
 
     let list = List::new(items)
         .style(

@@ -8,7 +8,7 @@ use crossterm::event::{
     self,
     KeyCode::{self, Char},
 };
-use list::TaskList;
+use list::{TaskItem, TaskList};
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tui::Event;
@@ -43,13 +43,14 @@ pub enum Action {
     NextTask,
     PreviousTask,
     EnterInsertMode,
+    ToggleTaskState,
     HandleInputKey(event::Event),
     AddTask,
     ClearNewTask,
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
-    let center = centered_rect(f.size(), 30, 30);
+    let center = centered_rect(f.size(), 80, 30);
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -101,26 +102,21 @@ fn get_action(_app: &App, event: Event) -> Action {
         Event::Error => Action::None,
         Event::Tick => Action::Tick,
         Event::Render => Action::Render,
-        Event::Key(key, event) => {
-            match _app.mode {
-                Mode::Normal => {
-                    match key.code {
-                        Char('j') => Action::NextTask,
-                        Char('k') => Action::PreviousTask,
-                        KeyCode::Enter => Action::EnterInsertMode,
-                        Char('J') => Action::NetworkRequestAndThenIncrement, // new
-                        Char('K') => Action::NetworkRequestAndThenDecrement, // new
-                        Char('q') => Action::Quit,
-                        _ => Action::None,
-                    }
-                }
-                Mode::Input => match key.code {
-                    KeyCode::Esc => Action::ClearNewTask,
-                    KeyCode::Enter => Action::AddTask,
-                    _ => Action::HandleInputKey(event),
-                },
-            }
-        }
+        Event::Key(key, event) => match _app.mode {
+            Mode::Normal => match key.code {
+                Char('j') => Action::NextTask,
+                Char('k') => Action::PreviousTask,
+                KeyCode::Enter => Action::EnterInsertMode,
+                Char(' ') => Action::ToggleTaskState,
+                Char('q') => Action::Quit,
+                _ => Action::None,
+            },
+            Mode::Input => match key.code {
+                KeyCode::Esc => Action::ClearNewTask,
+                KeyCode::Enter => Action::AddTask,
+                _ => Action::HandleInputKey(event),
+            },
+        },
         _ => Action::None,
     }
 }
@@ -163,12 +159,20 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
         }
 
         Action::AddTask => {
-            app.tasks.items.push(app.new_task.value().into());
+            app.tasks
+                .items
+                .push(TaskItem::new(app.new_task.value().into()));
             app.new_task.reset();
         }
 
         Action::HandleInputKey(event) => {
             app.new_task.handle_event(&event);
+        }
+
+        Action::ToggleTaskState => {
+            if let Some(index) = app.tasks.state.selected() {
+                app.tasks.items[index].toggle_state()
+            }
         }
 
         Action::Quit => app.should_quit = true,
