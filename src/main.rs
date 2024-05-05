@@ -28,10 +28,11 @@ struct App {
     tasks: TaskList,
 }
 
-#[derive(PartialEq)]
-enum Mode {
+#[derive(PartialEq, Clone)]
+pub enum Mode {
     Normal,
-    Input,
+    Edit,
+    Create,
 }
 
 // App actions
@@ -47,11 +48,12 @@ pub enum Action {
     None,
     NextTask,
     PreviousTask,
-    EnterInsertMode,
     ToggleTaskState,
     HandleInputKey(event::Event),
     AddTask,
     ClearNewTask,
+    SaveTask,
+    SwitchMode(Mode),
 }
 
 /// Simple program to greet a person
@@ -73,6 +75,11 @@ fn ui(f: &mut Frame, app: &mut App) {
         .split(center);
 
     list::ui(f, layout[0], &mut app.tasks);
+
+    if app.mode != Mode::Create {
+        return;
+    }
+
     let input = Paragraph::new(app.new_task.value());
 
     let input_line = Layout::default()
@@ -80,25 +87,16 @@ fn ui(f: &mut Frame, app: &mut App) {
         .constraints(vec![Constraint::Length(2), Constraint::Min(1)])
         .split(layout[1]);
 
-    if app.mode == Mode::Input {
-        f.render_widget(Paragraph::new("\u{f460}"), input_line[0]);
-        f.render_widget(input, input_line[1]);
-    }
+    f.render_widget(Paragraph::new("\u{f460}"), input_line[0]);
+    f.render_widget(input, input_line[1]);
 
     let width = layout[0].width.max(3) - 1;
     let scroll = app.new_task.visual_scroll(width as usize);
-    match app.mode {
-        Mode::Normal => {}
-        Mode::Input => {
-            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
-            f.set_cursor(
-                // Put cursor past the end of the input text
-                layout[1].x + ((app.new_task.visual_cursor()).max(scroll) - scroll) as u16 + 2,
-                // Move one line down, from the border to the input line
-                layout[1].y,
-            )
-        }
-    }
+
+    f.set_cursor(
+        layout[1].x + ((app.new_task.visual_cursor()).max(scroll) - scroll) as u16 + 2,
+        layout[1].y,
+    )
 }
 
 fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
@@ -128,16 +126,22 @@ fn get_action(_app: &App, event: Event) -> Action {
         Event::Render => Action::Render,
         Event::Key(key, event) => match _app.mode {
             Mode::Normal => match key.code {
+                Char('e') => Action::SwitchMode(Mode::Edit),
                 Char('j') => Action::NextTask,
                 Char('k') => Action::PreviousTask,
-                KeyCode::Enter => Action::EnterInsertMode,
+                KeyCode::Enter => Action::SwitchMode(Mode::Create),
                 Char(' ') => Action::ToggleTaskState,
                 Char('q') => Action::Quit,
                 _ => Action::None,
             },
-            Mode::Input => match key.code {
+            Mode::Create => match key.code {
                 KeyCode::Esc => Action::ClearNewTask,
                 KeyCode::Enter => Action::AddTask,
+                _ => Action::HandleInputKey(event),
+            },
+            Mode::Edit => match key.code {
+                KeyCode::Esc => Action::ClearNewTask,
+                KeyCode::Enter => Action::SaveTask,
                 _ => Action::HandleInputKey(event),
             },
         },
@@ -175,8 +179,6 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
             app.tasks.previous();
         }
 
-        Action::EnterInsertMode => app.mode = Mode::Input,
-
         Action::ClearNewTask => {
             app.new_task.reset();
             app.mode = Mode::Normal
@@ -206,6 +208,10 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
                 let path = app.file_path.clone();
                 tokio::spawn(async move { write_tasks(&path, tasks).await });
             }
+        }
+
+        Action::SwitchMode(mode) => {
+            app.mode = mode;
         }
 
         Action::Quit => app.should_quit = true,
@@ -244,7 +250,6 @@ async fn run() -> Result<()> {
     loop {
         let e = tui.next().await.unwrap();
         match e {
-            tui::Event::Quit => action_tx.send(Action::Quit)?,
             tui::Event::Tick => action_tx.send(Action::Tick)?,
             tui::Event::Render => action_tx.send(Action::Render)?,
             tui::Event::Key(..) => {
