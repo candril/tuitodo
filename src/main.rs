@@ -10,7 +10,7 @@ use crossterm::event::{
     self,
     KeyCode::{self, Char},
 };
-use file::load_tasks;
+use file::{load_tasks, write_tasks};
 use list::{TaskItem, TaskList};
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedSender};
@@ -162,10 +162,14 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
         }
 
         Action::AddTask => {
-            app.tasks
-                .items
-                .push(TaskItem::new(app.new_task.value().into()));
+            app.tasks.items.push(TaskItem::new(
+                app.new_task.value().into(),
+                list::TaskState::Open,
+            ));
             app.new_task.reset();
+
+            let tasks = app.tasks.items.clone();
+            tokio::spawn(async move { write_tasks(tasks).await });
         }
 
         Action::HandleInputKey(event) => {
@@ -174,7 +178,10 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
 
         Action::ToggleTaskState => {
             if let Some(index) = app.tasks.state.selected() {
-                app.tasks.items[index].toggle_state()
+                app.tasks.items[index].toggle_state();
+
+                let tasks = app.tasks.items.clone();
+                tokio::spawn(async move { write_tasks(tasks).await });
             }
         }
 

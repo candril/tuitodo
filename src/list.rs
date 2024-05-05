@@ -10,26 +10,25 @@ pub struct TaskList {
     pub items: Vec<TaskItem>,
 }
 
+#[derive(Clone)]
 pub enum TaskState {
     Done,
     Open,
 }
 
+#[derive(Clone)]
 pub struct TaskItem {
-    pub task_state: TaskState,
+    pub state: TaskState,
     pub text: String,
 }
 
 impl TaskItem {
-    pub fn new(text: String) -> Self {
-        Self {
-            text,
-            task_state: TaskState::Open,
-        }
+    pub fn new(text: String, state: TaskState) -> Self {
+        Self { text, state }
     }
 
     pub fn toggle_state(&mut self) {
-        self.task_state = match self.task_state {
+        self.state = match self.state {
             TaskState::Open => TaskState::Done,
             TaskState::Done => TaskState::Open,
         }
@@ -68,7 +67,7 @@ impl TaskList {
 }
 
 fn item_ui(item: &TaskItem) -> ListItem {
-    let state_char = match item.task_state {
+    let state_char = match item.state {
         TaskState::Done => "x",
         TaskState::Open => " ",
     };
