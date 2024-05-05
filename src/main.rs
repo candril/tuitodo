@@ -28,6 +28,7 @@ struct App {
     tasks: TaskList,
 }
 
+#[derive(PartialEq)]
 enum Mode {
     Normal,
     Input,
@@ -65,14 +66,24 @@ struct Args {
 fn ui(f: &mut Frame, app: &mut App) {
     let center = centered_rect(f.size(), 80, 30);
 
+    let task_count = app.tasks.items.len() as u16;
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(vec![Constraint::Min(10), Constraint::Length(1)])
+        .constraints(vec![Constraint::Length(task_count), Constraint::Length(1)])
         .split(center);
 
     list::ui(f, layout[0], &mut app.tasks);
     let input = Paragraph::new(app.new_task.value());
-    f.render_widget(input, layout[1]);
+
+    let input_line = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Length(2), Constraint::Min(1)])
+        .split(layout[1]);
+
+    if app.mode == Mode::Input {
+        f.render_widget(Paragraph::new("\u{f460}"), input_line[0]);
+        f.render_widget(input, input_line[1]);
+    }
 
     let width = layout[0].width.max(3) - 1;
     let scroll = app.new_task.visual_scroll(width as usize);
@@ -82,7 +93,7 @@ fn ui(f: &mut Frame, app: &mut App) {
             // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
             f.set_cursor(
                 // Put cursor past the end of the input text
-                layout[1].x + ((app.new_task.visual_cursor()).max(scroll) - scroll) as u16,
+                layout[1].x + ((app.new_task.visual_cursor()).max(scroll) - scroll) as u16 + 2,
                 // Move one line down, from the border to the input line
                 layout[1].y,
             )
@@ -217,7 +228,6 @@ async fn run() -> Result<()> {
     let mut tui = tui::Tui::new()?.tick_rate(1.0).frame_rate(30.0);
     tui.enter()?;
 
-    // application state
     let mut app = App {
         file_path: args.file,
         counter: 0,
@@ -247,10 +257,8 @@ async fn run() -> Result<()> {
         while let Ok(action) = action_rx.try_recv() {
             let mut maybe_action = Some(action);
 
-            // application update
             while let Some(act) = maybe_action {
                 let next_action = update(&mut app, act.clone());
-                // render only when we receive Action::Render
                 if let Action::Render = act {
                     tui.draw(|f| {
                         ui(f, &mut app);
@@ -260,7 +268,6 @@ async fn run() -> Result<()> {
             }
         }
 
-        // application exit
         if app.should_quit {
             break;
         }

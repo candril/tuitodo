@@ -68,11 +68,11 @@ impl TaskList {
 
 fn item_ui(item: &TaskItem) -> ListItem {
     let state_char = match item.state {
-        TaskState::Done => "x",
-        TaskState::Open => " ",
+        TaskState::Done => "\u{f058}",
+        TaskState::Open => "\u{f05d}",
     };
 
-    ListItem::from(format!("- [{}] {}", state_char, item.text.clone()))
+    ListItem::from(format!("{} {}", state_char, item.text.clone()))
 }
 
 pub fn ui(f: &mut Frame, area: Rect, tasks: &mut TaskList) {
