@@ -6,14 +6,12 @@ use tokio::{
 use crate::list::{TaskItem, TaskState};
 use color_eyre::eyre::Result;
 
-pub async fn load_tasks() -> Result<Vec<TaskItem>> {
-    let path = "file.txt";
-
-    if (fs::metadata(path).await).is_err() {
+pub async fn load_tasks(file_path: &str) -> Result<Vec<TaskItem>> {
+    if (fs::metadata(&file_path).await).is_err() {
         return Ok(vec![]);
     }
 
-    let file = File::open(path).await?;
+    let file = File::open(&file_path).await?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
     let mut items = Vec::new();
@@ -47,12 +45,12 @@ fn get_state_char(state: &TaskState) -> String {
     }
 }
 
-pub async fn write_tasks(tasks: Vec<TaskItem>) -> Result<()> {
+pub async fn write_tasks(file_path: &str, tasks: Vec<TaskItem>) -> Result<()> {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open("file.txt")
+        .open(file_path)
         .await?;
 
     let mut writer = BufWriter::new(file);

@@ -1,7 +1,7 @@
 mod file;
 mod list;
 mod tui;
-
+use clap::Parser;
 use core::panic;
 use std::time::Duration;
 
@@ -19,6 +19,7 @@ use tui_input::{backend::crossterm::EventHandler, Input};
 
 // App state
 struct App {
+    file_path: String,
     counter: i64,
     should_quit: bool,
     action_tx: UnboundedSender<Action>,
@@ -50,6 +51,15 @@ pub enum Action {
     HandleInputKey(event::Event),
     AddTask,
     ClearNewTask,
+}
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// file path of the todo file to load
+    #[arg(short, long)]
+    file: String,
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
@@ -169,7 +179,8 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
             app.new_task.reset();
 
             let tasks = app.tasks.items.clone();
-            tokio::spawn(async move { write_tasks(tasks).await });
+            let path = app.file_path.clone();
+            tokio::spawn(async move { write_tasks(&path, tasks).await });
         }
 
         Action::HandleInputKey(event) => {
@@ -181,7 +192,8 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
                 app.tasks.items[index].toggle_state();
 
                 let tasks = app.tasks.items.clone();
-                tokio::spawn(async move { write_tasks(tasks).await });
+                let path = app.file_path.clone();
+                tokio::spawn(async move { write_tasks(&path, tasks).await });
             }
         }
 
@@ -193,18 +205,21 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
 }
 
 async fn run() -> Result<()> {
+    let args = Args::parse();
+
+    let Ok(tasks) = load_tasks(args.file.as_str()).await else {
+        panic!("could not load tasks")
+    };
+
     let (action_tx, mut action_rx) = mpsc::unbounded_channel(); // new
 
     // ratatui terminal
     let mut tui = tui::Tui::new()?.tick_rate(1.0).frame_rate(30.0);
     tui.enter()?;
 
-    let Ok(tasks) = load_tasks().await else {
-        panic!("could not load tasks")
-    };
-
     // application state
     let mut app = App {
+        file_path: args.file,
         counter: 0,
         should_quit: false,
         action_tx: action_tx.clone(),
