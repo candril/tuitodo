@@ -1,6 +1,8 @@
+mod file;
 mod list;
 mod tui;
 
+use core::panic;
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
@@ -8,6 +10,7 @@ use crossterm::event::{
     self,
     KeyCode::{self, Char},
 };
+use file::load_tasks;
 use list::{TaskItem, TaskList};
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedSender};
@@ -189,6 +192,10 @@ async fn run() -> Result<()> {
     let mut tui = tui::Tui::new()?.tick_rate(1.0).frame_rate(30.0);
     tui.enter()?;
 
+    let Ok(tasks) = load_tasks().await else {
+        panic!("could not load tasks")
+    };
+
     // application state
     let mut app = App {
         counter: 0,
@@ -198,7 +205,7 @@ async fn run() -> Result<()> {
         mode: Mode::Normal,
         tasks: TaskList {
             state: ListState::default(),
-            items: vec![],
+            items: tasks,
         },
     };
 
