@@ -119,19 +119,19 @@ fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn get_action(_app: &App, event: Event) -> Action {
+fn get_action(app: &App, event: Event) -> Action {
     match event {
         Event::Error => Action::None,
         Event::Tick => Action::Tick,
         Event::Render => Action::Render,
-        Event::Key(key, event) => match _app.mode {
+        Event::Key(key, event) => match app.mode {
             Mode::Normal => match key.code {
-                Char('e') => Action::SwitchMode(Mode::Edit),
                 Char('j') => Action::NextTask,
                 Char('k') => Action::PreviousTask,
-                KeyCode::Enter => Action::SwitchMode(Mode::Create),
                 Char(' ') => Action::ToggleTaskState,
                 Char('q') => Action::Quit,
+                Char('e') => Action::SwitchMode(Mode::Edit),
+                KeyCode::Enter => Action::SwitchMode(Mode::Create),
                 _ => Action::None,
             },
             Mode::Create => match key.code {
@@ -211,6 +211,10 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
         }
 
         Action::SwitchMode(mode) => {
+            if mode == Mode::Edit && app.tasks.state.selected().is_none() {
+                return None;
+            }
+
             app.mode = mode;
         }
 

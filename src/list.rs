@@ -77,7 +77,6 @@ fn item_ui(item: &TaskItem) -> ListItem {
 
 pub fn ui(f: &mut Frame, area: Rect, tasks: &mut TaskList) {
     let items: Vec<ListItem> = tasks.items.iter().map(|i| item_ui(i)).collect();
-
     let list = List::new(items)
         .style(
             Style::default()
