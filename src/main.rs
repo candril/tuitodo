@@ -1,6 +1,8 @@
 mod file;
 mod list;
+mod task_item;
 mod tui;
+
 use clap::Parser;
 use core::panic;
 use std::time::Duration;
@@ -10,22 +12,23 @@ use crossterm::event::{
     self,
     KeyCode::{self, Char},
 };
-use file::{load_tasks, write_tasks};
-use list::{TaskItem, TaskList};
+use file::TaskStore;
+use list::TaskList;
 use ratatui::{prelude::*, widgets::*};
+use task_item::TaskItem;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tui::Event;
 use tui_input::{backend::crossterm::EventHandler, Input};
 
 // App state
 struct App {
-    file_path: String,
     counter: i64,
     should_quit: bool,
     action_tx: UnboundedSender<Action>,
     mode: Mode,
     new_task: Input,
     tasks: TaskList,
+    store: TaskStore,
 }
 
 #[derive(PartialEq, Clone)]
@@ -68,13 +71,13 @@ struct Args {
 fn ui(f: &mut Frame, app: &mut App) {
     let center = centered_rect(f.size(), 80, 30);
 
-    let task_count = app.tasks.items.len() as u16;
+    let task_count = app.store.items.len() as u16;
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(vec![Constraint::Length(task_count), Constraint::Length(1)])
         .split(center);
 
-    list::ui(f, layout[0], &mut app.tasks);
+    list::ui(f, layout[0], &app.store.items, &mut app.tasks.state);
 
     if app.mode != Mode::Create {
         return;
@@ -173,10 +176,10 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
         }
 
         Action::NextTask => {
-            app.tasks.next();
+            app.tasks.next(app.store.items.len());
         }
         Action::PreviousTask => {
-            app.tasks.previous();
+            app.tasks.previous(app.store.items.len());
         }
 
         Action::ClearNewTask => {
@@ -185,15 +188,14 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
         }
 
         Action::AddTask => {
-            app.tasks.items.push(TaskItem::new(
+            app.store.items.push(TaskItem::new(
                 app.new_task.value().into(),
-                list::TaskState::Open,
+                task_item::TaskState::Open,
             ));
             app.new_task.reset();
 
-            let tasks = app.tasks.items.clone();
-            let path = app.file_path.clone();
-            tokio::spawn(async move { write_tasks(&path, tasks).await });
+            let store = app.store.clone();
+            tokio::spawn(async move { store.save().await });
         }
 
         Action::HandleInputKey(event) => {
@@ -202,11 +204,10 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
 
         Action::ToggleTaskState => {
             if let Some(index) = app.tasks.state.selected() {
-                app.tasks.items[index].toggle_state();
+                app.store.items[index].toggle_state();
 
-                let tasks = app.tasks.items.clone();
-                let path = app.file_path.clone();
-                tokio::spawn(async move { write_tasks(&path, tasks).await });
+                let store = app.store.clone();
+                tokio::spawn(async move { store.save().await });
             }
         }
 
@@ -228,18 +229,17 @@ fn update(app: &mut App, action: Action) -> Option<Action> {
 async fn run() -> Result<()> {
     let args = Args::parse();
 
-    let Ok(tasks) = load_tasks(args.file.as_str()).await else {
-        panic!("could not load tasks")
-    };
-
     let (action_tx, mut action_rx) = mpsc::unbounded_channel(); // new
 
     // ratatui terminal
     let mut tui = tui::Tui::new()?.tick_rate(1.0).frame_rate(30.0);
     tui.enter()?;
 
+    let Ok(store) = TaskStore::new(args.file).await else {
+        panic!("could not load tasks")
+    };
+
     let mut app = App {
-        file_path: args.file,
         counter: 0,
         should_quit: false,
         action_tx: action_tx.clone(),
@@ -247,8 +247,8 @@ async fn run() -> Result<()> {
         mode: Mode::Normal,
         tasks: TaskList {
             state: ListState::default(),
-            items: tasks,
         },
+        store,
     };
 
     loop {

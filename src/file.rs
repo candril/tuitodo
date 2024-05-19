@@ -3,10 +3,34 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
 };
 
-use crate::list::{TaskItem, TaskState};
+use crate::task_item::{TaskItem, TaskState};
 use color_eyre::eyre::Result;
 
-pub async fn load_tasks(file_path: &str) -> Result<Vec<TaskItem>> {
+#[derive(Clone)]
+pub struct TaskStore {
+    pub items: Vec<TaskItem>,
+    file_path: String,
+}
+
+impl TaskStore {
+    pub async fn new(file: String) -> Result<TaskStore, ()> {
+        let Ok(items) = load_tasks(&file).await else {
+            return Err(());
+        };
+
+        Ok(Self {
+            items,
+            file_path: file,
+        })
+    }
+
+    pub async fn save(self) -> Result<()> {
+        write_tasks(&self.file_path, self.items).await?;
+        Ok(())
+    }
+}
+
+async fn load_tasks(file_path: &str) -> Result<Vec<TaskItem>> {
     if (fs::metadata(&file_path).await).is_err() {
         return Ok(vec![]);
     }
@@ -45,7 +69,7 @@ fn get_state_char(state: &TaskState) -> String {
     }
 }
 
-pub async fn write_tasks(file_path: &str, tasks: Vec<TaskItem>) -> Result<()> {
+async fn write_tasks(file_path: &str, tasks: Vec<TaskItem>) -> Result<()> {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
