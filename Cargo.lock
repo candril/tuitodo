@@ -603,22 +603,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ratatui-counter-app"
-version = "0.1.0"
-dependencies = [
- "clap",
- "color-eyre",
- "crossterm",
- "futures",
- "ratatui",
- "serde",
- "serde_derive",
- "tokio",
- "tokio-util",
- "tui-input",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -892,6 +876,22 @@ checksum = "b3e785f863a3af4c800a2a669d0b64c879b538738e352607e2624d03f868dc01"
 dependencies = [
  "crossterm",
  "unicode-width",
+]
+
+[[package]]
+name = "tuitodo"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "color-eyre",
+ "crossterm",
+ "futures",
+ "ratatui",
+ "serde",
+ "serde_derive",
+ "tokio",
+ "tokio-util",
+ "tui-input",
 ]
 
 [[package]]
